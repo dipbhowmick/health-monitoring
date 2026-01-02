@@ -266,14 +266,9 @@
         let activityMap  = ['Biking' ,'Downstairs', 'Jogging', 'Sitting', 'Standing', 'Upstairs', 'Walking']
         let model;
 
-        async function loadModel() {
-            model = await tf.loadLayersModel("./har_tfjs/model.json");
-            console.log("Model loaded");
-        }
-        (async () => {
-            await loadModel();
-        })();
-
+        model = await tf.loadLayersModel("./har_tfjs/model.json");
+        console.log("Model loaded");
+    
         function calculateAverage(arr) {
             if (arr.length === 0) return 0;
             return (arr.reduce((x, y) => x + y, 0) / arr.length).toFixed(2);
