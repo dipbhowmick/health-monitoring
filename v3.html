@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Monitoring Dashboard</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js for charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDK v8 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <!-- TFJS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            font-family: 'Roboto', sans-serif;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .card {
+            border: 1px solid #e0e0e0;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            background: #fff;
+        }
+        .tab-content {
+            padding: 20px;
+        }
+        .btn-primary {
+            background: linear-gradient(45deg, #2196f3, #21cbf3);
+            border: none;
+            border-radius: 25px;
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #21cbf3, #2196f3);
+        }
+        .form-control {
+            border-radius: 10px;
+            border: 1px solid #ddd;
+            background: #f9f9f9;
+            color: #333;
+        }
+        .form-control::placeholder {
+            color: #999;
+        }
+        .alert {
+            border-radius: 10px;
+            background: rgba(33, 150, 243, 0.1);
+            color: #333;
+            border: 1px solid #2196f3;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;  /* Ensures full width */
+            height: 300px;
+            margin-bottom: 20px;
+        }
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 250px;  /* Reduce height on mobile for better fit */
+            }
+            .container {
+                padding: 10px;  /* Reduce padding on mobile */
+            }
+        }
+        .nav-tabs .nav-link {
+            color: #333;
+            border: 1px solid #ddd;
+        }
+        .nav-tabs .nav-link.active {
+            background: #2196f3;
+            border-color: #2196f3;
+            color: #fff;
+        }
+        h1, h5, h6 {
+            color: #333;
+        }
+        .card-title {
+            color: #333;
+        }
+        .bg-light {
+            background: #f8f9fa !important;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Health Monitoring Dashboard</h1>
+        <ul class="nav nav-tabs justify-content-center" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="live-tab" data-bs-toggle="tab" data-bs-target="#live" type="button" role="tab" aria-controls="live" aria-selected="true">Live Monitoring</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="historic-tab" data-bs-toggle="tab" data-bs-target="#historic" type="button" role="tab" aria-controls="historic" aria-selected="false">Historic Stats</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="diet-tab" data-bs-toggle="tab" data-bs-target="#diet" type="button" role="tab" aria-controls="diet" aria-selected="false">Diet Chart</button>
+            </li>
+        </ul>
+        <div class="tab-content" id="myTabContent">
+            <!-- Live Monitoring Tab -->
+            <div class="tab-pane fade show active" id="live" role="tabpanel" aria-labelledby="live-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Real-Time Sensor Data</h5>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Heart Rate</h6>
+                                        <p id="hr">-- bpm</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Accelerometer X</h6>
+                                        <p id="acc_x">--</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Accelerometer Y</h6>
+                                        <p id="acc_y">--</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Accelerometer Z</h6>
+                                        <p id="acc_z">--</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Temperature</h6>
+                                        <p id="temp">-- °C</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Gyroscope X</h6>
+                                        <p id="gyro_x">--</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Gyroscope Y</h6>
+                                        <p id="gyro_y">--</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Gyroscope Z</h6>
+                                        <p id="gyro_z">--</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <h5 class="mt-4">Live Charts</h5>
+                        <div class="chart-container">
+                            <canvas id="liveTempChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="liveHrChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="liveAccChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="liveGyroChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Historic Stats Tab -->
+            <div class="tab-pane fade" id="historic" role="tabpanel" aria-labelledby="historic-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Historic Sensor Data Analysis</h5>
+                        <div class="mb-3">
+                            <label for="dateFilter" class="form-label">Select Date:</label>
+                            <input type="date" class="form-control" id="dateFilter">
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="tempChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="hrChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="activityChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="accChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="gyroChart"></canvas>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <!-- Diet Chart Tab -->
+            <div class="tab-pane fade" id="diet" role="tabpanel" aria-labelledby="diet-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">BMI Calculator & Diet Suggestions</h5>
+                        <form id="bmiForm">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label for="height" class="form-label">Height (cm)</label>
+                                    <input type="number" class="form-control" id="height" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="weight" class="form-label">Weight (kg)</label>
+                                    <input type="number" class="form-control" id="weight" required>
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary w-100">Calculate BMI</button>
+                                </div>
+                            </div>
+                        </form>
+                        <div id="bmiResult" class="mt-3" style="display: none;">
+                            <div class="alert alert-info">
+                                <h6>Your BMI: <span id="bmiValue"></span></h6>
+                                <p id="bmiCategory"></p>
+                            </div>
+                            <div id="dietSuggestions"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+
+        let activityMap  = ['Biking' ,'Downstairs', 'Jogging', 'Sitting', 'Standing', 'Upstairs', 'Walking']
+        let model;
+
+        async function loadModel() {
+            model = await tf.loadLayersModel("./har_tfjs/model.json");
+            console.log("Model loaded");
+        }
+        (async () => {
+            await loadModel();
+        })();
+
+        function calculateAverage(arr) {
+            if (arr.length === 0) return 0;
+            return (arr.reduce((x, y) => x + y, 0) / arr.length).toFixed(2);
+        }
+
+        // Firebase configuration
+        const firebaseConfig = {
+            projectId: "health-monitoring-e80ef",
+            databaseURL: "https://health-monitoring-e80ef-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const sensorRef = database.ref('sensor');
+
+        console.info("Use clearData() to clear all the sensor data from firebase!");
+        function clearData() {
+            sensorRef.remove()
+            .then(() => {
+                console.log("All sensor data cleared successfully");
+            })
+            .catch((error) => {
+                console.error("Error clearing sensor data:", error);
+            });
+        }
+
+        // Global data for historic
+        let allData = [];
+        let filteredData = [];
+
+        // Live Monitoring
+        let liveTempData = [];
+        let liveHrData = [];
+        let liveAccMagData = [];
+        let liveGyroMagData = [];
+        let liveTimestamps = [];
+
+        sensorRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                allData = Object.values(data);
+                const keys = Object.keys(data);
+                const latestKey = keys[keys.length - 1];
+                const latestData = data[latestKey];
+                document.getElementById('temp').textContent = latestData.temp + ' °C';
+                document.getElementById('hr').textContent = latestData.hr + ' bpm';
+                
+                document.getElementById('acc_x').textContent = calculateAverage(latestData.acc_x);
+                document.getElementById('acc_y').textContent = calculateAverage(latestData.acc_y);
+                document.getElementById('acc_z').textContent = calculateAverage(latestData.acc_z);
+                document.getElementById('gyro_x').textContent = calculateAverage(latestData.gyro_x);
+                document.getElementById('gyro_y').textContent = calculateAverage(latestData.gyro_y);
+                document.getElementById('gyro_z').textContent = calculateAverage(latestData.gyro_z);
+
+                // Update live charts
+                const now = new Date().toLocaleTimeString();
+                liveTimestamps.push(now);
+                liveTempData.push(latestData.temp);
+                liveHrData.push(latestData.hr);
+                const accMag = Math.sqrt(
+                    Math.pow(calculateAverage(latestData.acc_x), 2) + 
+                    Math.pow(calculateAverage(latestData.acc_y), 2) + 
+                    Math.pow(calculateAverage(latestData.acc_z), 2)
+                );
+                liveAccMagData.push(accMag);
+                const gyroMag = Math.sqrt(
+                    Math.pow(calculateAverage(latestData.gyro_x), 2) + 
+                    Math.pow(calculateAverage(latestData.gyro_y), 2) + 
+                    Math.pow(calculateAverage(latestData.gyro_z), 2)
+                );
+                liveGyroMagData.push(gyroMag);
+
+                // Limit to last 20 points for live charts
+                if (liveTimestamps.length > 20) {
+                    liveTimestamps.shift();
+                    liveTempData.shift();
+                    liveHrData.shift();
+                    liveAccMagData.shift();
+                    liveGyroMagData.shift();
+                }
+
+                updateLiveCharts();
+                updateHistoricCharts();
+            }
+        });
+
+        // Live Charts
+        let liveTempChart, liveHrChart, liveAccChart, liveGyroChart;
+
+        function updateLiveCharts() {
+            if (!liveTempChart) {
+                const tempCtx = document.getElementById('liveTempChart').getContext('2d');
+                liveTempChart = new Chart(tempCtx, {
+                    type: 'line',
+                    data: {
+                        labels: liveTimestamps,
+                        datasets: [{
+                            label: 'Temperature (°C)',
+                            data: liveTempData,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        scales: {
+                            x: { display: true, title: { display: true, text: 'Time' } },
+                            y: { display: true, title: { display: true, text: 'Temperature (°C)' } }
+                        }
+                    }
+                });
+            } else {
+                liveTempChart.data.labels = liveTimestamps;
+                liveTempChart.data.datasets[0].data = liveTempData;
+                liveTempChart.update();
+            }
+
+            if (!liveHrChart) {
+                const hrCtx = document.getElementById('liveHrChart').getContext('2d');
+                liveHrChart = new Chart(hrCtx, {
+                    type: 'line',
+                    data: {
+                        labels: liveTimestamps,
+                        datasets: [{
+                            label: 'Heart Rate (bpm)',
+                            data: liveHrData,
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        scales: {
+                            x: { display: true, title: { display: true, text: 'Time' } },
+                            y: { display: true, title: { display: true, text: 'Heart Rate (bpm)' } }
+                        }
+                    }
+                });
+            } else {
+                liveHrChart.data.labels = liveTimestamps;
+                liveHrChart.data.datasets[0].data = liveHrData;
+                liveHrChart.update();
+            }
+
+            if (!liveAccChart) {
+                const accCtx = document.getElementById('liveAccChart').getContext('2d');
+                liveAccChart = new Chart(accCtx, {
+                    type: 'line',
+                    data: {
+                        labels: liveTimestamps,
+                        datasets: [{
+                            label: 'Accelerometer Magnitude',
+                            data: liveAccMagData,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        scales: {
+                            x: { display: true, title: { display: true, text: 'Time' } },
+                            y: { display: true, title: { display: true, text: 'Magnitude' } }
+                        }
+                    }
+                });
+            } else {
+                liveAccChart.data.labels = liveTimestamps;
+                liveAccChart.data.datasets[0].data = liveAccMagData;
+                liveAccChart.update();
+            }
+
+            if (!liveGyroChart) {
+                const gyroCtx = document.getElementById('liveGyroChart').getContext('2d');
+                liveGyroChart = new Chart(gyroCtx, {
+                    type: 'line',
+                    data: {
+                        labels: liveTimestamps,
+                        datasets: [{
+                            label: 'Gyroscope Magnitude',
+                            data: liveGyroMagData,
+                            borderColor: 'rgba(153, 102, 255, 1)',
+                            backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        scales: {
+                            x: { display: true, title: { display: true, text: 'Time' } },
+                            y: { display: true, title: { display: true, text: 'Magnitude' } }
+                        }
+                    }
+                });
+            } else {
+                liveGyroChart.data.labels = liveTimestamps;
+                liveGyroChart.data.datasets[0].data = liveGyroMagData;
+                liveGyroChart.update();
+            }
+        }
+
+                // Historic Stats
+        let tempChart, hrChart, accChart, gyroChart, activityChart;
+
+        function updateHistoricCharts() {
+            const selectedDate = document.getElementById('dateFilter').value;
+            filteredData = selectedDate ? allData.filter(entry => new Date(entry.ts).toDateString() === new Date(selectedDate).toDateString()) : allData;
+
+            const timestamps = filteredData.map(entry => new Date(entry.ts).toLocaleString());
+            const tempData = filteredData.map(entry => entry.temp);
+            const hrData = filteredData.map(entry => entry.hr);
+            const accXData = filteredData.map(entry => calculateAverage(entry.acc_x));
+            const accYData = filteredData.map(entry => calculateAverage(entry.acc_y));
+            const accZData = filteredData.map(entry => calculateAverage(entry.acc_z));
+            const accMagData = filteredData.map(entry => Math.sqrt(
+                Math.pow(calculateAverage(entry.acc_x), 2) + 
+                Math.pow(calculateAverage(entry.acc_y), 2) + 
+                Math.pow(calculateAverage(entry.acc_z), 2)
+            ));
+            const gyroXData = filteredData.map(entry => calculateAverage(entry.gyro_x));
+            const gyroYData = filteredData.map(entry => calculateAverage(entry.gyro_y));
+            const gyroZData = filteredData.map(entry => calculateAverage(entry.gyro_z));
+            const gyroMagData = filteredData.map(entry => Math.sqrt(
+                Math.pow(calculateAverage(entry.gyro_x), 2) + 
+                Math.pow(calculateAverage(entry.gyro_y), 2) + 
+                Math.pow(calculateAverage(entry.gyro_z), 2)
+            ));
+            const activityData = filteredData.map(entry => {
+                return entry.acc_x.map((_, i) => [
+                    entry.acc_x[i],
+                    -entry.acc_z[i],
+                    entry.acc_y[i],
+                    
+                    entry.gyro_x[i],
+                    -entry.gyro_z[i],
+                    entry.gyro_y[i]
+                    
+                ]);
+            });
+            
+            const xTensor = tf.tensor(activityData);
+
+            model.predict(xTensor).array().then(result => {
+                // console.log(result);
+                tf.tensor(result).argMax(-1).data().then(pred => {
+                    // console.log(pred);
+                    if(!activityChart){
+                        const tempCtx = document.getElementById('activityChart').getContext('2d');
+                        tempChart = new Chart(tempCtx, {
+                            type: 'line',
+                            data: {
+                                labels: timestamps,
+                                datasets: [{
+                                    label: 'Activity',
+                                    data: pred,
+                                    stepped: true,
+                                    borderColor: 'rgba(255, 99, 132, 1)',
+                                    borderWidth: 2,
+                                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                    x: { display: true, title: { display: true, text: 'Time' } },
+                                    y: { 
+                                        min: 0,
+                                        max: 6,
+                                        display: true, 
+                                        title: { display: true, text: 'Activity' }, 
+                                        ticks: {
+                                            stepSize: 1,
+                                            autoSkip: false,
+                                            callback: x => activityMap[x]
+                                        } 
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        tempChart.data.labels = timestamps;
+                        tempChart.data.datasets[0].data = pred;
+                        tempChart.update();
+                    }
+                });
+            });
+
+            if (!tempChart) {
+                const tempCtx = document.getElementById('tempChart').getContext('2d');
+                tempChart = new Chart(tempCtx, {
+                    type: 'line',
+                    data: {
+                        labels: timestamps,
+                        datasets: [{
+                            label: 'Temperature (°C)',
+                            data: tempData,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { display: true, title: { display: true, text: 'Time' } },
+                            y: { display: true, title: { display: true, text: 'Temperature (°C)' } }
+                        }
+                    }
+                });
+            } else {
+                tempChart.data.labels = timestamps;
+                tempChart.data.datasets[0].data = tempData;
+                tempChart.update();
+            }
+
+            if (!hrChart) {
+                const hrCtx = document.getElementById('hrChart').getContext('2d');
+                hrChart = new Chart(hrCtx, {
+                    type: 'line',
+                    data: {
+                        labels: timestamps,
+                        datasets: [{
+                            label: 'Heart Rate (bpm)',
+                            data: hrData,
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { display: true, title: { display: true, text: 'Time' } },
+                            y: { display: true, title: { display: true, text: 'Heart Rate (bpm)' } }
+                        }
+                    }
+                });
+            } else {
+                hrChart.data.labels = timestamps;
+                hrChart.data.datasets[0].data = hrData;
+                hrChart.update();
+            }
+
+            if (!accChart) {
+                const accCtx = document.getElementById('accChart').getContext('2d');
+                accChart = new Chart(accCtx, {
+                    type: 'line',
+                    data: {
+                        labels: timestamps,
+                        datasets: [
+                            {
+                                label: 'Accelerometer X',
+                                data: accXData,
+                                borderColor: 'rgba(255, 206, 86, 1)',
+                                backgroundColor: 'rgba(255, 206, 86, 0.2)',
+                            },
+                            {
+                                label: 'Accelerometer Y',
+                                data: accYData,
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            },
+                            {
+                                label: 'Accelerometer Z',
+                                data: accZData,
+                                borderColor: 'rgba(153, 102, 255, 1)',
+                                backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                            },
+                            {
+                                label: 'Accelerometer Magnitude',
+                                data: accMagData,
+                                borderColor: 'rgba(255, 159, 64, 1)',
+                                backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { display: true, title: { display: true, text: 'Time' } },
+                            y: { display: true, title: { display: true, text: 'Value' } }
+                        }
+                    }
+                });
+            } else {
+                accChart.data.labels = timestamps;
+                accChart.data.datasets[0].data = accXData;
+                accChart.data.datasets[1].data = accYData;
+                accChart.data.datasets[2].data = accZData;
+                accChart.data.datasets[3].data = accMagData;
+                accChart.update();
+            }
+
+            if (!gyroChart) {
+                const gyroCtx = document.getElementById('gyroChart').getContext('2d');
+                gyroChart = new Chart(gyroCtx, {
+                    type: 'line',
+                    data: {
+                        labels: timestamps,
+                        datasets: [
+                            {
+                                label: 'Gyroscope X',
+                                data: gyroXData,
+                                borderColor: 'rgba(255, 206, 86, 1)',
+                                backgroundColor: 'rgba(255, 206, 86, 0.2)',
+                            },
+                            {
+                                label: 'Gyroscope Y',
+                                data: gyroYData,
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            },
+                            {
+                                label: 'Gyroscope Z',
+                                data: gyroZData,
+                                borderColor: 'rgba(153, 102, 255, 1)',
+                                backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                            },
+                            {
+                                label: 'Gyroscope Magnitude',
+                                data: gyroMagData,
+                                borderColor: 'rgba(255, 159, 64, 1)',
+                                backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { display: true, title: { display: true, text: 'Time' } },
+                            y: { display: true, title: { display: true, text: 'Value' } }
+                        }
+                    }
+                });
+            } else {
+                gyroChart.data.labels = timestamps;
+                gyroChart.data.datasets[0].data = gyroXData;
+                gyroChart.data.datasets[1].data = gyroYData;
+                gyroChart.data.datasets[2].data = gyroZData;
+                gyroChart.data.datasets[3].data = gyroMagData;
+                gyroChart.update();
+            }
+        }
+
+                // Date Filter Event
+        document.getElementById('dateFilter').addEventListener('change', updateHistoricCharts);
+
+                // BMI Calculator and Diet Suggestions
+        document.getElementById('bmiForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const height = parseFloat(document.getElementById('height').value) / 100; // Convert to meters
+            const weight = parseFloat(document.getElementById('weight').value);
+            const bmi = (weight / (height * height)).toFixed(2);
+            document.getElementById('bmiValue').textContent = bmi;
+
+            let category = '';
+            let suggestions = [];
+
+            if (bmi < 18.5) {
+                category = 'Underweight';
+                suggestions = [
+                    'Increase calorie intake with nutrient-dense foods.',
+                    'Include healthy fats like avocados, nuts, and olive oil.',
+                    'Eat more protein-rich foods like eggs, chicken, and beans.',
+                    'Have frequent meals and snacks.'
+                ];
+            } else if (bmi >= 18.5 && bmi < 25) {
+                category = 'Normal weight';
+                suggestions = [
+                    'Maintain a balanced diet with fruits, vegetables, lean proteins, and whole grains.',
+                    'Stay hydrated and exercise regularly.',
+                    'Limit processed foods and sugars.'
+                ];
+            } else if (bmi >= 25 && bmi < 30) {
+                category = 'Overweight';
+                suggestions = [
+                    'Focus on portion control and calorie deficit.',
+                    'Increase physical activity like walking or jogging.',
+                    'Eat more vegetables and lean proteins.',
+                    'Reduce sugary drinks and snacks.'
+                ];
+            } else {
+                category = 'Obese';
+                suggestions = [
+                    'Consult a healthcare professional for personalized advice.',
+                    'Aim for gradual weight loss through diet and exercise.',
+                    'Incorporate cardio and strength training.',
+                    'Focus on whole foods and avoid fast food.'
+                ];
+            }
+
+            const div = document.getElementById('dietSuggestions');
+            var content = '<h6>Diet Suggestions:</h6><ul>';
+            for (var i = 0; i < suggestions.length; i++) {
+                content += '<li>' + suggestions[i] + '</li>';
+            }
+            content += '</ul>';
+            div.innerHTML = content;
+
+            document.getElementById('bmiCategory').textContent = 'Category: ' + category;
+            document.getElementById('bmiResult').style.display = 'block';
+        });
+        
+    </script>
+
+</body>
+</html>
